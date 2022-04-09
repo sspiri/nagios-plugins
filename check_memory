@@ -1,0 +1,65 @@
+#! /bin/bash
+
+STATE_OK=0
+STATE_WARNING=1
+STATE_CRITICAL=2
+STATE_UNKNOWN=3
+
+PERCENTAGE_WARNING=80
+PERCENTAGE_CRITICAL=90
+
+function usage() {
+    printf 'Synopsis: %s [-h] [-w] [-c]\n' "${0##*/}"
+
+    cat<<EOF
+    -h | --help         produce this help message
+    -w | --warning      set warning threshold
+    -c | --critial      set critical threshhold
+EOF
+}
+
+function parse_options() {
+    while (( $# > 0 )); do
+        case "$1" in
+            -h|--help) usage; exit "${STATE_UNKNOWN}";;
+            -w|--warning) PERCENTAGE_WARNING=$2; shift;;
+            -c|--critical) PERCENTAGE_WARNING=$2; shift;;
+            *) printf 'Error: [%s]: No such option.\n' "$1" >&2; exit "${STATE_UNKNOWN}";;
+        esac
+
+        shift
+    done
+}
+
+parse_options "$@" || exit "${STATE_UNKNOWN}"
+
+output=$(free -b || exit "${STATE_UNKNOWN}")
+
+total_mem=$(<<< "${output}" awk '$1 == "Mem:" { print $2; }' || exit "${STATE_UNKNOWN}")
+used_mem=$(<<< "${output}" awk '$1 == "Mem:" { print $3; }' || exit "${STATE_UNKNOWN}")
+available_mem=$(<<< "${output}" awk '$1 == "Mem:" { print $7; }' || exit "${STATE_UNKNOWN}")
+
+gb=1073741824
+
+total_mem_gb=$(bc -l <<< "${total_mem} / ${gb}" || exit "${STATE_UNKNOWN}")
+used_mem_gb=$(bc -l <<< "${used_mem} / ${gb}" || exit "${STATE_UNKNOWN}")
+available_mem_gb=$(bc -l <<< "${available_mem} / ${gb}" || exit "${STATE_UNKNOWN}")
+
+total_mem_gb=$(printf '%.2f' "${total_mem_gb}")
+used_mem_gb=$(printf '%.2f' "${used_mem_gb}")
+available_mem_gb=$(printf '%.2f' "${available_mem_gb}")
+
+percentage=$(bc -l <<< "${used_mem} / ${total_mem} * 100" || exit "${STATE_UNKNOWN}")
+percentage=$(printf '%.f' "${percentage}")
+
+if (( percentage >= PERCENTAGE_CRITICAL )); then
+    printf 'CRITICAL - Memory usage at %s%% | total=%sGB used=%sGB  available=%sGB\n' "${percentage}" "${total_mem_gb}" "${used_mem_gb}" "${available_mem_gb}"
+    exit "${STATE_CRITICAL}"
+
+elif (( percentage >= PERCENTAGE_WARNING )); then
+    printf 'WARNING - Memory usage at %s%% | total=%sGB used=%sGB available=%sGB\n' "${percentage}" "${total_mem_gb}" "${used_mem_gb}" "${available_mem_gb}"
+    exit "${STATE_WARNING}"
+fi
+
+printf 'OK - Memory usage at %s%% | total=%sGB used=%sGB available=%sGB\n' "${percentage}" "${total_mem_gb}" "${used_mem_gb}" "${available_mem_gb}"
+exit "${STATE_OK}"

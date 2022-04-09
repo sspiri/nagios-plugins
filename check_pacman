@@ -1,0 +1,52 @@
+#! /bin/bash
+
+STATE_OK=0
+STATE_WARNING=1
+STATE_CRITICAL=2
+STATE_UNKNOWN=3
+
+NPACKAGES_WARNING=1
+NPACKAGES_CRITICAL=20
+
+function usage() {
+    printf 'Synopsis: %s [-h] [-w] [-c]\n' "${0##*/}"
+
+    cat<<EOF
+    -h | --help         produce this help message
+    -w | --warning      set warning threshold
+    -c | --critial      set critical threshhold
+EOF
+}
+
+function parse_options() {
+    while (( $# > 0 )); do
+        case "$1" in
+            -h|--help) usage; exit "${STATE_OK}";;
+            -w|--warning) NPACKAGES_WARNING=$2; shift;;
+            -c|--critical) NPACKAGES_CRITICAL=$2; shift;;
+            *) printf 'Error: %s: No such option.\n' "$1" >&2; exit "${STATE_UNKNOWN}";;
+        esac
+
+        shift
+    done
+}
+
+parse_options "$@"
+
+pacman -Sy > /dev/null || exit "${STATE_UNKNOWN}"
+
+if mapfile -t packages < <(pacman -Qu || exit "${STATE_UNKNOWN}"); then
+    printf '%s\n' "${packages[@]}"
+
+    if (( ${#packages[@]} >= NPACKAGES_CRITICAL )); then
+        exit "${STATE_CRITICAL}"
+    fi
+
+    if (( ${#packages[@]} >= NPACKAGES_WARNING )); then
+        exit "${STATE_WARNING}"
+    fi
+
+    exit "${STATE_OK}"
+fi
+
+exit "${STATE_UNKNOWN}"
