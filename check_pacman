@@ -31,22 +31,25 @@ function parse_options() {
     done
 }
 
-parse_options "$@"
+parse_options "$@" || exit "${STATE_UNKNOWN}"
 
 pacman -Sy > /dev/null || exit "${STATE_UNKNOWN}"
 
-if mapfile -t packages < <(pacman -Qu || exit "${STATE_UNKNOWN}"); then
-    printf '%s\n' "${packages[@]}"
-
-    if (( ${#packages[@]} >= NPACKAGES_CRITICAL )); then
-        exit "${STATE_CRITICAL}"
-    fi
-
-    if (( ${#packages[@]} >= NPACKAGES_WARNING )); then
-        exit "${STATE_WARNING}"
-    fi
-
-    exit "${STATE_OK}"
+if ! mapfile -t packages < <(pacman -Qu || exit "${STATE_UNKNOWN}"); then
+    exit "${STATE_UNKNOWN}"
 fi
 
-exit "${STATE_UNKNOWN}"
+printf '%s\n' "${packages[@]}"
+
+if (( ${#packages[@]} >= NPACKAGES_CRITICAL )); then
+    printf 'CRITICAL - %d packages to upgrade.\n' "${#packages[@]}"
+    exit "${STATE_CRITICAL}"
+fi
+
+if (( ${#packages[@]} >= NPACKAGES_WARNING )); then
+    printf 'WARNING - %d packages to upgrade.\n' "${#packages[@]}"
+    exit "${STATE_WARNING}"
+fi
+
+printf 'OK - Updated\n'
+exit "${STATE_OK}"
